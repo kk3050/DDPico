@@ -8,7 +8,6 @@ DDPico is a complete solution for controlling WS2812B LED strips on Raspberry Pi
 - **Python Bridge**: UDP to USB Serial proxy with real-time web dashboard
 - **DDP Protocol Support**: Full DDP v1 implementation with pixel data handling
 - **Brightness Limiting**: Hardware-safe brightness control to prevent overdriving LEDs
-- **Tweening Support**: Optional frame interpolation for smoother animations
 - **Web Dashboard**: Monitor bridge status and logs in real-time
 
 ## Components
@@ -33,7 +32,7 @@ DDPico is a complete solution for controlling WS2812B LED strips on Raspberry Pi
 
 ## License
 
-[Add license here]
+This project is licensed under a custom license that allows free personal and non-commercial use. See [LICENSE](./LICENSE) for details. Commercial use requires explicit permission.
 
 ## Contributing
 
