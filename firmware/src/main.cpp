@@ -26,9 +26,19 @@
 // Configuration
 // ============================================================================
 
-// LED Configuration
-#define NUM_LEDS 43        // Number of LEDs in your strip
-#define LED_PIN 16          // GPIO pin for LED data (default: GP16)
+// LED Channel Configurations (predefined pins for each channel)
+// Up to 8 channels mapped to Pico GPIOs (DDP destination IDs 1-8)
+const LEDChannel channelConfigs[] = {
+    {43, 16, nullptr, nullptr},  // Channel 1: 43 LEDs on GP16 (default strip)
+    {50, 17, nullptr, nullptr},  // Channel 2: 50 LEDs on GP17
+    {50, 18, nullptr, nullptr},  // Channel 3: 50 LEDs on GP18
+    {50, 19, nullptr, nullptr},  // Channel 4: 50 LEDs on GP19
+    {50, 13, nullptr, nullptr},  // Channel 5: 50 LEDs on GP13
+    {50, 12, nullptr, nullptr},  // Channel 6: 50 LEDs on GP12
+    {50, 11, nullptr, nullptr},  // Channel 7: 50 LEDs on GP11
+    {50, 10, nullptr, nullptr}   // Channel 8: 50 LEDs on GP10
+};
+const uint8_t numChannels = sizeof(channelConfigs) / sizeof(channelConfigs[0]);
 
 // Serial Configuration
 #define SERIAL_BAUD 921600  // High baud rate for throughput (8x faster than default)
@@ -37,11 +47,8 @@
 // Global Objects
 // ============================================================================
 
-// Create Orb LED controller
-Orb orb(ORB_PRESET_PICO, NUM_LEDS, LED_PIN);
-
-// Create DDP controller
-DDPController ddpController(orb);
+// Create DDP controller with multiple channels
+DDPController ddpController(channelConfigs, numChannels);
 
 // ============================================================================
 // Setup
@@ -66,30 +73,38 @@ void setup() {
     Serial.println("[DDPico] [Info] CPU frequency: 133 MHz");
     Serial.println();
     
-    // Initialize LED strip
-    Serial.println("[DDPico] [Info] Initializing LED strip...");
-    orb.begin();
-    
-    // Show startup animation (quick color test)
-    Serial.println("[DDPico] [Info] Running LED test...");
-    
-    // Red
-    orb.fill(255, 0, 0);
-    orb.pixelsShow();
-    delay(200);
-    
-    // Green
-    orb.fill(0, 255, 0);
-    orb.pixelsShow();
-    delay(200);
-    
-    // Blue
-    orb.fill(0, 0, 255);
-    orb.pixelsShow();
-    delay(200);
-    
-    // Clear
-    orb.clear();
+    // Initialize LED channels (done in DDPController.begin())
+
+    // Show startup animation (quick color test on all channels)
+    Serial.println("[DDPico] [Info] Running LED test on all channels...");
+
+    for (uint8_t ch = 0; ch < ddpController.getNumChannels(); ch++) {
+        const LEDChannel* channels = ddpController.getChannels();
+        if (channels[ch].orb) {
+            Serial.print("[DDPico] [Info] Testing Channel ");
+            Serial.println(ch + 1);
+
+            Orb* orb = channels[ch].orb;
+
+            // Red
+            orb->fill(255, 0, 0);
+            orb->pixelsShow();
+            delay(100);
+
+            // Green
+            orb->fill(0, 255, 0);
+            orb->pixelsShow();
+            delay(100);
+
+            // Blue
+            orb->fill(0, 0, 255);
+            orb->pixelsShow();
+            delay(100);
+
+            // Clear
+            orb->clear();
+        }
+    }
     
     Serial.println("[DDPico] [Info] LED test complete");
     Serial.println();

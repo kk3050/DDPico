@@ -10,6 +10,23 @@ DDPico is a complete solution for controlling WS2812B LED strips on Raspberry Pi
 - **Brightness Limiting**: Hardware-safe brightness control to prevent overdriving LEDs
 - **Web Dashboard**: Monitor bridge status and logs in real-time
 
+## LED Channels (Predefined)
+
+The firmware now supports up to **8** concurrent LED output channels. Destination IDs 1–8 map to predefined GPIO pins and LED counts:
+
+| DDP Dest ID | GPIO Pin | Default LEDs |
+|-------------|----------|--------------|
+| 1           | GP16     | 43           |
+| 2           | GP17     | 50           |
+| 3           | GP18     | 50           |
+| 4           | GP19     | 50           |
+| 5           | GP13     | 50           |
+| 6           | GP12     | 50           |
+| 7           | GP11     | 50           |
+| 8           | GP10     | 50           |
+
+To change counts or pins, edit `channelConfigs` in [`firmware/src/main.cpp`](firmware/src/main.cpp) and rebuild.
+
 ## Components
 
 - [`firmware/`](./firmware/) - PlatformIO project for Raspberry Pi Pico

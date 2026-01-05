@@ -7,8 +7,21 @@
 #include "BrightnessLimiter.h"
 #include <pico/multicore.h>
 
-// Buffer size: 16KB for circular buffer (can hold ~10 full DDP packets)
-#define DDP_CIRCULAR_BUFFER_SIZE (16 * 1024)
+// Buffer size: 64KB for circular buffer (can hold ~40 full DDP packets)
+#define DDP_CIRCULAR_BUFFER_SIZE (64 * 1024)
+
+// Maximum number of LED channels supported
+// RP2040 provides 8 PIO state machines (4 per PIO block), so we allow up to 8
+// concurrent LED outputs when the Orb driver is configured accordingly.
+#define MAX_LED_CHANNELS 8
+
+// LED Channel configuration
+struct LEDChannel {
+    uint16_t numLEDs;
+    uint8_t pin;
+    Orb* orb;
+    BrightnessLimiter* limiter;
+};
 
 // Forward declaration
 class DDPController;
@@ -18,25 +31,31 @@ extern DDPController* g_ddpController;
 
 /**
  * DDP Controller - Standalone LED controller for DDP protocol
- * 
+ *
  * Architecture:
  * - Core 0: Main loop and LED updates (reads from buffer)
  * - Core 1: Serial receiver (writes to buffer)
- * 
+ *
  * This class is designed to be independent from the main Orb effects system
  */
 class DDPController {
 public:
-    DDPController(Orb& orb)
-        : orb(orb),
-          limiter(orb.numLEDs),
-          decoder(2048),
+    DDPController(const LEDChannel* channelConfigs, uint8_t numChannels)
+        : decoder(2048),
           running(false),
           packetsReceived(0),
           packetsProcessed(0),
           packetsDropped(0),
-          lastStatsTime(0) {
+          lastStatsTime(0),
+          numChannels(numChannels) {
         g_ddpController = this;
+
+        // Initialize channels
+        for (uint8_t i = 0; i < numChannels && i < MAX_LED_CHANNELS; i++) {
+            channels[i] = channelConfigs[i];
+            channels[i].orb = new Orb(ORB_PRESET_PICO, channelConfigs[i].numLEDs, channelConfigs[i].pin);
+            channels[i].limiter = new BrightnessLimiter(channelConfigs[i].numLEDs);
+        }
     }
     
     /**
@@ -45,21 +64,35 @@ public:
      */
     void begin() {
         Serial.println("[DDPico] [Info] Initializing DDP Controller...");
-        
+
+        // Initialize LED channels
+        for (uint8_t i = 0; i < numChannels; i++) {
+            if (channels[i].orb) {
+                Serial.print("[DDPico] [Info] Initializing Channel ");
+                Serial.print(i + 1);
+                Serial.print(" (");
+                Serial.print(channels[i].numLEDs);
+                Serial.print(" LEDs on pin ");
+                Serial.print(channels[i].pin);
+                Serial.println(")");
+                channels[i].orb->begin();
+            }
+        }
+
         // Clear buffer
         buffer.clear();
-        
+
         // Reset stats
         packetsReceived = 0;
         packetsProcessed = 0;
         packetsDropped = 0;
         lastStatsTime = millis();
-        
+
         running = true;
-        
+
         // Launch Core 1 for serial reception
         multicore_launch_core1(core1Entry);
-        
+
         Serial.println("[DDPico] [Info] DDP Controller initialized");
         Serial.println("[DDPico] [Info] Core 1: Serial receiver active");
         Serial.println("[DDPico] [Info] Core 0: LED processor ready");
@@ -140,17 +173,8 @@ public:
          Serial.print(", Push: ");
          Serial.println(packet.shouldPush() ? "YES" : "NO");
          
-         // Apply pixel data to LEDs
+         // Apply pixel data to LEDs (includes conditional pixelsShow when PUSH flag set)
          applyPixelData(packet);
-         
-         // Push to display if requested
-         if (packet.shouldPush()) {
-             Serial.println("[DDPico] ✓ Calling pixelsShow() to update LEDs");
-             orb.pixelsShow();
-             Serial.println("[DDPico] ✓ pixelsShow() completed");
-         } else {
-             Serial.println("[DDPico] ⚠ Push flag NOT set - LEDs not updated");
-         }
          
          // Print stats periodically
          if (millis() - lastStatsTime >= 5000) {
@@ -166,6 +190,20 @@ public:
         rx = packetsReceived;
         processed = packetsProcessed;
         dropped = packetsDropped;
+    }
+
+    /**
+     * Get channel configuration
+     */
+    const LEDChannel* getChannels() const {
+        return channels;
+    }
+
+    /**
+     * Get number of channels
+     */
+    uint8_t getNumChannels() const {
+        return numChannels;
     }
     
     /**
@@ -239,44 +277,60 @@ private:
      * Apply DDP pixel data to LEDs
      */
     void applyPixelData(const DDPPacket& packet) {
+         // Determine channel index from destination ID (1-based to 0-based)
+         uint8_t channelIndex = packet.destId - 1;
+
+         // Validate channel
+         if (channelIndex >= numChannels || !channels[channelIndex].orb) {
+             Serial.print("[DDPico] WARN: Invalid destination ID ");
+             Serial.print(packet.destId);
+             Serial.println(" - no such channel");
+             return;
+         }
+
+         Orb* orb = channels[channelIndex].orb;
+         BrightnessLimiter* limiter = channels[channelIndex].limiter;
+
          uint16_t pixelCount = DDPProtocol::getPixelCount(packet);
          uint16_t startPixel = packet.dataOffset / 3;  // Offset is in bytes, convert to pixels
-         
+
          // Log ALL pixel applications for debugging
-         Serial.print("[DDPico] Applying pixels - Start: ");
+         Serial.print("[DDPico] Applying pixels to Channel ");
+         Serial.print(channelIndex + 1);
+         Serial.print(" - Start: ");
          Serial.print(startPixel);
          Serial.print(", Count: ");
          Serial.print(pixelCount);
          Serial.print(", Total LEDs: ");
-         Serial.println(orb.numLEDs);
-         
+         Serial.println(orb->numLEDs);
+
          // Bounds check
-         if (startPixel >= orb.numLEDs) {
+         if (startPixel >= orb->numLEDs) {
              Serial.print("[DDPico] WARN: Start pixel ");
              Serial.print(startPixel);
              Serial.print(" >= LED count ");
-             Serial.println(orb.numLEDs);
+             Serial.println(orb->numLEDs);
              return;
          }
-         
+
          // Limit to available LEDs
-         if (startPixel + pixelCount > orb.numLEDs) {
-             pixelCount = orb.numLEDs - startPixel;
+         if (startPixel + pixelCount > orb->numLEDs) {
+             pixelCount = orb->numLEDs - startPixel;
          }
-         
+
          // Apply pixel data
          // Apply brightness limiting
-          limiter.limitBrightness((uint8_t*)packet.data, pixelCount);
+         limiter->limitBrightness((uint8_t*)packet.data, pixelCount);
 
-          const uint8_t* data = packet.data;
+         const uint8_t* data = packet.data;
          for (uint16_t i = 0; i < pixelCount; i++) {
              uint16_t pixelIndex = startPixel + i;
              uint8_t r = data[i * 3];
              uint8_t g = data[i * 3 + 1];
              uint8_t b = data[i * 3 + 2];
-             
-             orb.pixelSet(pixelIndex, r, g, b);
-             
+
+             orb->pixelSet(pixelIndex, r, g, b);
+
              // Log first pixel of first packet
              if (packetsProcessed == 1 && i == 0) {
                  Serial.print("[DDPico] First pixel RGB: (");
@@ -287,6 +341,15 @@ private:
                  Serial.print(b);
                  Serial.println(")");
              }
+         }
+
+         // Push to display if requested
+         if (packet.shouldPush()) {
+             Serial.println("[DDPico] ✓ Calling pixelsShow() to update LEDs");
+             orb->pixelsShow();
+             Serial.println("[DDPico] ✓ pixelsShow() completed");
+         } else {
+             Serial.println("[DDPico] ⚠ Push flag NOT set - LEDs not updated");
          }
     }
     
@@ -307,11 +370,11 @@ private:
         Serial.println("%");
     }
     
-    Orb& orb;
-    BrightnessLimiter limiter;
+    LEDChannel channels[MAX_LED_CHANNELS];
+    uint8_t numChannels;
     CircularBuffer<DDP_CIRCULAR_BUFFER_SIZE> buffer;
     COBSDecoder decoder;
-    
+
     volatile bool running;
     volatile uint32_t packetsReceived;
     volatile uint32_t packetsProcessed;
