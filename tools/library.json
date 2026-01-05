@@ -1,0 +1,11 @@
+{
+  "name": "DDPController",
+  "version": "1.0.0",
+  "description": "Distributed Display Protocol (DDP) controller for RP2040 with dual-core processing",
+  "keywords": "ddp, led, rp2040, pico, dual-core, circular-buffer",
+  "authors": {
+    "name": "GlowBit Orb Project"
+  },
+  "frameworks": "arduino",
+  "platforms": "raspberrypi"
+}

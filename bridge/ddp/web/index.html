@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DDPico Bridge Dashboard</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <div class="header">
+            <div class="title">
+                <div class="logo">⚡</div>
+                <div>
+                    <h1>DDPico Bridge Dashboard</h1>
+                    <p class="subtitle">Real-time DDP to USB Serial Bridge Monitor</p>
+                </div>
+            </div>
+            <div class="header-controls">
+                <div class="status-badge disconnected" id="statusBadge">
+                    <div class="status-dot"></div>
+                    <span id="statusText">Disconnected</span>
+                </div>
+                <button class="icon-btn" id="settingsBtn" title="Settings">⚙️</button>
+            </div>
+        </div>
+        
+        <!-- Stats Grid -->
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-icon">📥</div>
+                <div class="stat-content">
+                    <div class="stat-label">Packets Received</div>
+                    <div class="stat-value" id="packetsRx">0</div>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">📤</div>
+                <div class="stat-content">
+                    <div class="stat-label">Packets Sent</div>
+                    <div class="stat-value" id="packetsTx">0</div>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">⬇️</div>
+                <div class="stat-content">
+                    <div class="stat-label">Data Received</div>
+                    <div class="stat-value" id="bytesRx">0<span class="stat-unit">KB</span></div>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">⬆️</div>
+                <div class="stat-content">
+                    <div class="stat-label">Data Sent</div>
+                    <div class="stat-value" id="bytesTx">0<span class="stat-unit">KB</span></div>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">⚡</div>
+                <div class="stat-content">
+                    <div class="stat-label">Throughput</div>
+                    <div class="stat-value" id="throughput">0<span class="stat-unit">KB/s</span></div>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">⏱️</div>
+                <div class="stat-content">
+                    <div class="stat-label">Uptime</div>
+                    <div class="stat-value" id="uptime">00:00:00</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Packet Rate Chart -->
+        <div class="chart-container">
+            <div class="chart-header">
+                <div class="chart-title">
+                    <span class="chart-icon">📊</span>
+                    Packet Rate (packets/sec)
+                </div>
+                <div class="chart-legend">
+                    <span class="legend-item"><span class="legend-color rx"></span> Received</span>
+                    <span class="legend-item"><span class="legend-color tx"></span> Sent</span>
+                </div>
+            </div>
+            <canvas id="packetChart"></canvas>
+        </div>
+
+        <!-- Connection Info -->
+        <div class="info-grid">
+            <div class="info-card">
+                <div class="info-header">
+                    <span class="info-icon">🔌</span>
+                    <span class="info-title">Serial Connection</span>
+                </div>
+                <div class="info-content">
+                    <div class="info-row">
+                        <span class="info-label">Port:</span>
+                        <span class="info-value" id="serialPort">-</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Baud Rate:</span>
+                        <span class="info-value" id="baudRate">921600</span>
+                    </div>
+                </div>
+            </div>
+            <div class="info-card">
+                <div class="info-header">
+                    <span class="info-icon">🌐</span>
+                    <span class="info-title">UDP Listener</span>
+                </div>
+                <div class="info-content">
+                    <div class="info-row">
+                        <span class="info-label">Address:</span>
+                        <span class="info-value">0.0.0.0:4048</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Protocol:</span>
+                        <span class="info-value">DDP (COBS)</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Console -->
+        <div class="console-container">
+            <div class="console-header">
+                <div class="console-title">
+                    <span class="console-icon">💻</span>
+                    System Console
+                </div>
+                <div class="controls">
+                    <div class="filter-group">
+                        <label class="filter-label">
+                            <input type="checkbox" id="filterError" checked>
+                            <span class="filter-badge error">ERROR</span>
+                        </label>
+                        <label class="filter-label">
+                            <input type="checkbox" id="filterInfo" checked>
+                            <span class="filter-badge info">INFO</span>
+                        </label>
+                        <label class="filter-label">
+                            <input type="checkbox" id="filterDebug" checked>
+                            <span class="filter-badge debug">DEBUG</span>
+                        </label>
+                    </div>
+                    <button onclick="clearLog()">Clear</button>
+                    <button onclick="togglePause()" id="pauseBtn">Pause</button>
+                    <button onclick="toggleAutoScroll()" id="scrollBtn">Auto-scroll: ON</button>
+                    <button onclick="exportLogs()">Export</button>
+                </div>
+            </div>
+            <div class="console" id="console"></div>
+        </div>
+    </div>
+
+    <!-- Settings Modal -->
+    <div class="modal" id="settingsModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Settings</h2>
+                <button class="close-btn" onclick="closeSettings()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="setting-group">
+                    <label class="setting-label">Theme</label>
+                    <select id="themeSelect" class="setting-input">
+                        <option value="dark">Dark</option>
+                        <option value="light">Light</option>
+                        <option value="auto">Auto</option>
+                    </select>
+                </div>
+                <div class="setting-group">
+                    <label class="setting-label">Update Interval (ms)</label>
+                    <input type="number" id="updateInterval" class="setting-input" value="100" min="50" max="1000" step="50">
+                </div>
+                <div class="setting-group">
+                    <label class="setting-label">Max Console Lines</label>
+                    <input type="number" id="maxConsoleLines" class="setting-input" value="500" min="100" max="2000" step="100">
+                </div>
+                <div class="setting-group">
+                    <label class="setting-label">
+                        <input type="checkbox" id="soundEnabled">
+                        Enable Sound Notifications
+                    </label>
+                </div>
+                <div class="setting-group">
+                    <label class="setting-label">
+                        <input type="checkbox" id="showTimestamps" checked>
+                        Show Timestamps
+                    </label>
+                </div>
+                <div class="setting-group">
+                    <label class="setting-label">
+                        <input type="checkbox" id="tweeningEnabled">
+                        Enable Frame Tweening
+                    </label>
+                </div>
+                <div class="setting-group">
+                    <label class="setting-label">Tweening Steps</label>
+                    <input type="number" id="tweeningSteps" class="setting-input" value="4" min="1" max="20" step="1">
+                </div>
+                <div class="setting-group">
+                    <label class="setting-label">Target FPS</label>
+                    <input type="number" id="targetFps" class="setting-input" value="60" min="10" max="120" step="5">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" onclick="closeSettings()">Cancel</button>
+                <button class="btn-primary" onclick="saveSettings()">Save</button>
+            </div>
+        </div>
+    </div>
+    
+    <script src="js/chart.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>
