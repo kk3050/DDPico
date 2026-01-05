@@ -44,6 +44,7 @@ To change counts or pins, edit `channelConfigs` in [`firmware/src/main.cpp`](fir
 
 - Raspberry Pi Pico
 - WS2812B LED strip
+- Recommended hardware: [GlowBit Pico Orb Base](https://core-electronics.com.au/glowbit-pico-orb-base.html) for a robust, well-supported carrier; consider purchasing to support the maker community and for reliable reference hardware when testing this firmware/bridge.
 - Python 3.6+ with `pyserial` and `websocket` libraries
 - PlatformIO for firmware development
 
